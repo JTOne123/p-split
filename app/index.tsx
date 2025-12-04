@@ -1,3 +1,4 @@
+import DiffView, { DiffFile } from '@/components/DiffView';
 import FileGroup from '@/components/FileGroup';
 import Settings from '@/components/Settings';
 import fs from '@/utils/fs-adapter';
@@ -25,6 +26,10 @@ export default function App() {
 
     const [groups, setGroups] = useState<Group[]>([]);
     const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+
+    const [focusedFile, setFocusedFile] = useState<string | null>(null);
+    const [diffData, setDiffData] = useState<DiffFile[]>([]);
+    const [diffLoading, setDiffLoading] = useState(false);
 
     const [showSettings, setShowSettings] = useState(false);
     const [llmConfig, setLlmConfig] = useState(() => loadLLMConfig());
@@ -69,12 +74,66 @@ export default function App() {
         try {
             const changes = await getChangedFiles(base, target);
             setFiles(changes);
+            setFocusedFile(null);
+            setDiffData([]);
         } catch (e: any) {
             setError("Error loading diff: " + e.message);
         } finally {
             setLoading(false);
         }
     };
+
+    const handleViewFile = async (path: string) => {
+        setFocusedFile(path);
+        // If the file is not in selectedFiles, we show it individually.
+        // If it IS in selectedFiles, the useEffect below will handle it (or we can just let it be).
+        // Actually, if we click a file, we probably want to see JUST that file, or maybe highlight it?
+        // The requirement says "Diff View should show all diff of selected files".
+        // If I click a file to "view" it (without selecting), it should probably replace the view or add to it?
+        // Let's assume:
+        // 1. If files are selected, show ALL selected files.
+        // 2. If NO files are selected, show the currently "focused" (clicked) file.
+
+        if (selectedFiles.size === 0) {
+            setDiffLoading(true);
+            try {
+                const original = await getFileContent(baseBranch, path);
+                const modified = await getFileContent(currentBranch, path);
+                setDiffData([{ path, original, modified }]);
+            } catch (e: any) {
+                console.error("Error loading file content:", e);
+            } finally {
+                setDiffLoading(false);
+            }
+        }
+    };
+
+    useEffect(() => {
+        const loadSelectedDiffs = async () => {
+            if (selectedFiles.size > 0) {
+                setDiffLoading(true);
+                try {
+                    const promises = Array.from(selectedFiles).map(async (path) => {
+                        const original = await getFileContent(baseBranch, path);
+                        const modified = await getFileContent(currentBranch, path);
+                        return { path, original, modified };
+                    });
+                    const results = await Promise.all(promises);
+                    setDiffData(results);
+                } catch (e) {
+                    console.error("Error loading selected diffs:", e);
+                } finally {
+                    setDiffLoading(false);
+                }
+            } else if (focusedFile) {
+                // Fallback to focused file if selection is cleared
+                handleViewFile(focusedFile);
+            } else {
+                setDiffData([]);
+            }
+        };
+        loadSelectedDiffs();
+    }, [selectedFiles, baseBranch, currentBranch]);
 
     useEffect(() => {
         if (repoLoaded) {
@@ -242,16 +301,43 @@ export default function App() {
                         {loading ? <Text>Loading...</Text> : (
                             <ScrollView style={styles.fileList}>
                                 {files.map((file, index) => (
-                                    <TouchableOpacity
+                                    <View
                                         key={index}
-                                        style={[styles.fileItem, selectedFiles.has(file.path) && styles.selectedFile]}
-                                        onPress={() => toggleFileSelection(file.path)}
+                                        style={[styles.fileItem, focusedFile === file.path && styles.focusedFile]}
                                     >
-                                        <Text style={styles.filePath}>{file.path}</Text>
-                                        <Text style={[styles.status, styles[file.status]]}>{file.status}</Text>
-                                    </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => toggleFileSelection(file.path)}
+                                            style={styles.checkboxContainer}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedFiles.has(file.path)}
+                                                onChange={() => { }} // Handled by TouchableOpacity
+                                                style={{ pointerEvents: 'none' }}
+                                            />
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={styles.fileInfo}
+                                            onPress={() => handleViewFile(file.path)}
+                                        >
+                                            <Text style={styles.filePath} numberOfLines={1} ellipsizeMode="middle">{file.path}</Text>
+                                            <Text style={[styles.status, styles[file.status]]}>{file.status}</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 ))}
                             </ScrollView>
+                        )}
+                    </View>
+
+                    <View style={styles.middlePanel}>
+                        <Text style={styles.subtitle}>Diff View</Text>
+                        {diffLoading ? (
+                            <Text>Loading diff...</Text>
+                        ) : diffData.length > 0 ? (
+                            <DiffView files={diffData} />
+                        ) : (
+                            <Text style={styles.emptyText}>Select a file to view diff</Text>
                         )}
                     </View>
 
@@ -271,16 +357,19 @@ export default function App() {
                             {groups.length === 0 && <Text style={styles.emptyText}>Select files and click "Create Group"</Text>}
                         </ScrollView>
                     </View>
-                </View>
-            )}
+                </View >
+            )
+            }
 
-            {showSettings && (
-                <Settings
-                    onSave={handleSaveSettings}
-                    onCancel={() => setShowSettings(false)}
-                />
-            )}
-        </View>
+            {
+                showSettings && (
+                    <Settings
+                        onSave={handleSaveSettings}
+                        onCancel={() => setShowSettings(false)}
+                    />
+                )
+            }
+        </View >
     );
 };
 
@@ -323,12 +412,22 @@ const styles = StyleSheet.create({
         padding: 15,
         display: 'flex',
         flexDirection: 'column',
+        maxWidth: 350,
+    },
+    middlePanel: {
+        flex: 2,
+        backgroundColor: 'white',
+        borderRadius: 8,
+        padding: 15,
+        display: 'flex',
+        flexDirection: 'column',
     },
     rightPanel: {
         flex: 1,
         backgroundColor: '#eee',
         borderRadius: 8,
         padding: 15,
+        maxWidth: 350,
     },
     controls: {
         flexDirection: 'row',
@@ -375,14 +474,26 @@ const styles = StyleSheet.create({
     },
     fileItem: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        alignItems: 'center',
         paddingVertical: 8,
         paddingHorizontal: 5,
         borderBottomWidth: 1,
         borderBottomColor: '#eee',
     },
-    selectedFile: {
+    focusedFile: {
         backgroundColor: '#e3f2fd',
+    },
+    selectedFile: {
+        // No longer used on the whole row, but maybe for the checkbox area?
+    },
+    checkboxContainer: {
+        paddingRight: 10,
+    },
+    fileInfo: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     filePath: {
         flex: 1,
@@ -400,6 +511,9 @@ const styles = StyleSheet.create({
     },
     deleted: {
         color: 'red',
+    },
+    unmodified: {
+        color: '#333',
     },
     groupList: {
         flex: 1,
