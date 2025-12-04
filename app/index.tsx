@@ -13,6 +13,7 @@ interface Group {
     name: string;
     prompt: string;
     files: string[];
+    useLLM: boolean;
 }
 
 export default function App() {
@@ -33,7 +34,7 @@ export default function App() {
 
     const [showSettings, setShowSettings] = useState(false);
     const [llmConfig, setLlmConfig] = useState(() => loadLLMConfig());
-    const [useLLM, setUseLLM] = useState(false);
+
 
     const pickRepo = async () => {
         try {
@@ -157,12 +158,13 @@ export default function App() {
             name: `Group ${groups.length + 1}`,
             prompt: '',
             files: Array.from(selectedFiles),
+            useLLM: true,
         };
         setGroups([...groups, newGroup]);
         setSelectedFiles(new Set()); // Clear selection
     };
 
-    const updateGroup = (id: string, data: { name?: string, prompt?: string }) => {
+    const updateGroup = (id: string, data: { name?: string, prompt?: string, useLLM?: boolean }) => {
         setGroups(groups.map(g => g.id === id ? { ...g, ...data } : g));
     };
 
@@ -194,7 +196,7 @@ export default function App() {
                 let finalContent = content;
 
                 // Use LLM if configured and enabled
-                if (useLLM && llmConfig?.apiKey) {
+                if (group.useLLM && llmConfig?.apiKey) {
                     try {
                         finalContent = await callLLM(group.prompt, content, llmConfig);
                     } catch (e: any) {
@@ -285,15 +287,6 @@ export default function App() {
                         <View style={styles.fileHeader}>
                             <Text style={styles.subtitle}>Changed Files ({files.length})</Text>
                             <View style={styles.fileHeaderRight}>
-                                <label style={styles.llmToggle as any}>
-                                    <input
-                                        type="checkbox"
-                                        checked={useLLM}
-                                        onChange={(e) => setUseLLM(e.target.checked)}
-                                        disabled={!llmConfig?.apiKey}
-                                    />
-                                    <Text style={styles.llmToggleText}>Use LLM</Text>
-                                </label>
                                 <Button title={`Create Group (${selectedFiles.size})`} onPress={createGroup} disabled={selectedFiles.size === 0} />
                             </View>
                         </View>
