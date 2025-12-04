@@ -97,8 +97,8 @@ export default function App() {
         if (selectedFiles.size === 0) {
             setDiffLoading(true);
             try {
-                const original = await getFileContent(baseBranch, path);
-                const modified = await getFileContent(currentBranch, path);
+                const original = await getFileContent(baseBranch, path); //comment 1
+                const modified = await getFileContent(currentBranch, path); //comment 2
                 setDiffData([{ path, original, modified }]);
             } catch (e: any) {
                 console.error("Error loading file content:", e);
@@ -119,7 +119,7 @@ export default function App() {
                         return { path, original, modified };
                     });
                     const results = await Promise.all(promises);
-                    setDiffData(results);
+                    setDiffData(results); //comment 1
                 } catch (e) {
                     console.error("Error loading selected diffs:", e);
                 } finally {
@@ -137,7 +137,7 @@ export default function App() {
 
     useEffect(() => {
         if (repoLoaded) {
-            loadDiff(baseBranch, currentBranch);
+            loadDiff(baseBranch, currentBranch); //comment 1
         }
     }, [baseBranch, currentBranch]);
 

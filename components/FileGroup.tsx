@@ -17,7 +17,7 @@ export default function FileGroup({ id, initialName, initialPrompt, files, onUpd
     const [prompt, setPrompt] = useState(initialPrompt || '');
 
     const handleNameChange = (t: string) => {
-        setName(t);
+        setName(t); //comment 2
         onUpdate(id, { name: t });
     };
 
@@ -33,7 +33,7 @@ export default function FileGroup({ id, initialName, initialPrompt, files, onUpd
                     style={styles.nameInput}
                     value={name}
                     onChangeText={handleNameChange}
-                    placeholder="Group Name"
+                    placeholder="Group Name" // comment 1
                 />
                 <Button title="Delete" color="red" onPress={() => onDeleteGroup(id)} />
             </View>

@@ -17,7 +17,7 @@ export default function Settings({ onSave, onCancel }: SettingsProps) {
     };
 
     const getDefaultEndpoint = () => {
-        if (provider === 'gemini') {
+        if (provider === 'gemini') { // comment 2
             return 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
         }
         return 'https://api.openai.com/v1/chat/completions';
