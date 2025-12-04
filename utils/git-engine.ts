@@ -51,30 +51,39 @@ export async function getChangedFiles(baseBranch: string, targetBranch: string):
 
     const files: FileDiff[] = [];
 
-    await walk({
-        fs,
-        dir,
-        trees: [TREE({ ref: baseBranch }), TREE({ ref: targetBranch })],
-        map: async (filepath, [baseEntry, targetEntry]) => {
-            if (filepath === '.') return;
+    try {
+        console.error('[GitEngine] starting walk with fs:', Object.keys(fs.promises));
+        await walk({
+            fs,
+            dir,
+            trees: [TREE({ ref: baseBranch }), TREE({ ref: targetBranch })],
+            map: async (filepath, [baseEntry, targetEntry]) => {
+                if (filepath === '.') return;
 
-            const baseType = await baseEntry?.type();
-            const targetType = await targetEntry?.type();
+                const baseType = await baseEntry?.type();
+                const targetType = await targetEntry?.type();
 
-            if (baseType === 'tree' || targetType === 'tree') return; // Skip directories in output
+                if (baseType === 'tree' || targetType === 'tree') return; // Skip directories in output
 
-            const baseOid = await baseEntry?.oid();
-            const targetOid = await targetEntry?.oid();
+                const baseOid = await baseEntry?.oid();
+                const targetOid = await targetEntry?.oid();
 
-            if (!baseOid && targetOid) {
-                files.push({ path: filepath, status: 'added' });
-            } else if (baseOid && !targetOid) {
-                files.push({ path: filepath, status: 'deleted' });
-            } else if (baseOid !== targetOid) {
-                files.push({ path: filepath, status: 'modified' });
-            }
-        },
-    });
+                if (!baseOid && targetOid) {
+                    files.push({ path: filepath, status: 'added' });
+                } else if (baseOid && !targetOid) {
+                    files.push({ path: filepath, status: 'deleted' });
+                } else if (baseOid !== targetOid) {
+                    files.push({ path: filepath, status: 'modified' });
+                }
+            },
+        });
+    } catch (e: any) {
+        console.error("Error walking git tree:", e);
+        if (e.message && e.message.includes("Cannot read properties of null (reading 'slice')")) {
+            throw new Error("Failed to load diff. The repository might be too large for the browser to handle (isomorphic-git limitation).");
+        }
+        throw e;
+    }
 
     return files;
 }

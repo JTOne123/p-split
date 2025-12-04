@@ -39,8 +39,75 @@ async function getHandle(path: string, options: { create?: boolean; directory?: 
     return current;
 }
 
+// File descriptor management
+let nextFd = 10;
+
+// FileHandle implementation
+class FileHandle {
+    private handle: FileSystemFileHandle;
+    private position: number;
+    public fd: number;
+
+    constructor(handle: FileSystemFileHandle, fd: number) {
+        this.handle = handle;
+        this.position = 0;
+        this.fd = fd;
+    }
+
+    async read(buffer: Buffer | Uint8Array, offset: number, length: number, position: number | null) {
+        console.error('[FS] FileHandle.read', this.fd, 'len:', length, 'pos:', position, 'offset:', offset);
+        const file = await this.handle.getFile();
+
+        let readPos = position;
+        if (readPos === null || readPos === undefined) {
+            readPos = this.position;
+        }
+
+        const slice = file.slice(readPos, readPos + length);
+        const arrayBuffer = await slice.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+
+        if (position === null || position === undefined) {
+            this.position += data.length;
+        }
+
+        if (Buffer.isBuffer(buffer)) {
+            buffer.set(data, offset);
+        } else {
+            (buffer as Uint8Array).set(data, offset);
+        }
+
+        return { bytesRead: data.length, buffer };
+    }
+
+    async close() {
+        console.error('[FS] FileHandle.close', this.fd);
+        // No real close needed for FileSystemHandle, but we can cleanup if needed
+    }
+
+    async stat() {
+        const file = await this.handle.getFile();
+        return {
+            isDirectory: () => false,
+            isFile: () => true,
+            isSymbolicLink: () => false,
+            size: file.size,
+            mtimeMs: file.lastModified,
+            mode: 0o777,
+            uid: 0,
+            gid: 0,
+            ino: 0,
+            dev: 0,
+        };
+    }
+}
+
 export const promises = {
     readFile: async (path: string, options?: any) => {
+        console.error('[FS] readFile', path);
+        if (!path || path === 'undefined') {
+            throw { code: 'ENOENT', message: `Invalid path: ${path}` };
+        }
         const handle = await getHandle(path) as FileSystemFileHandle;
         const file = await handle.getFile();
         const buffer = await file.arrayBuffer();
@@ -119,6 +186,13 @@ export const promises = {
     },
     symlink: async (target: string, path: string) => {
         throw { code: 'EINVAL', message: 'Symlinks not supported' };
+    },
+    // Random access implementation matching Node.js fs.promises
+    open: async (path: string, flags: string) => {
+        console.error('[FS] open', path, flags);
+        const handle = await getHandle(path, { create: flags.includes('w') }) as FileSystemFileHandle;
+        const fd = nextFd++;
+        return new FileHandle(handle, fd);
     }
 };
 
